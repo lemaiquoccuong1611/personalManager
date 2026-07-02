@@ -18,6 +18,7 @@
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <style>
   :root{
@@ -291,6 +292,23 @@
   .auth-skip{margin-top:16px; font-size:12px; color:var(--text-faint); font-weight:600;}
   .auth-skip button{color:var(--accent); font-weight:700; text-decoration:underline;}
 
+  /* Data (Excel) modal rows */
+  .data-row{display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--border); border-radius:14px;}
+  .data-info{flex:1; min-width:0;}
+  .data-t{font-size:13.5px; font-weight:700; display:flex; align-items:center; gap:6px;}
+  .data-d{font-size:12px; color:var(--text-faint); margin-top:4px; line-height:1.45;}
+
+  /* Mobile "more" bottom sheet */
+  .sheet-overlay{position:fixed; inset:0; background:rgba(10,14,25,0.45); backdrop-filter:blur(2px); z-index:120; display:flex; align-items:flex-end; animation:fadeIn .18s ease;}
+  .sheet{width:100%; background:var(--card); border-top-left-radius:22px; border-top-right-radius:22px; box-shadow:var(--shadow-lg); padding:10px 18px calc(20px + env(safe-area-inset-bottom)); animation:sheetUp .24s cubic-bezier(.2,.9,.3,1.1);}
+  @keyframes sheetUp{from{transform:translateY(100%);} to{transform:translateY(0);}}
+  .sheet-grip{width:40px; height:4px; border-radius:4px; background:var(--border); margin:2px auto 14px;}
+  .sheet-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .sheet-item{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; padding:16px 6px; border-radius:14px; background:var(--bg-elev); border:1px solid var(--border); font-size:12px; font-weight:600; color:var(--text-soft);}
+  .sheet-item.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .sheet-item:hover{border-color:var(--accent);}
+  .sheet-acc{display:flex; align-items:center; gap:8px; justify-content:center; font-size:12px; color:var(--text-faint); font-weight:600; padding-top:14px; word-break:break-all;}
+
   /* Bottom nav (mobile) */
   .bottom-nav{display:none;}
 
@@ -303,8 +321,17 @@
   @media (max-width: 768px){
     .sidebar{display:none;}
     .content{padding:6px 16px 90px;}
-    .topbar{padding:16px 16px 10px;}
+    .topbar{padding:calc(10px + env(safe-area-inset-top)) 16px 10px;}
     .searchbox{display:none;}
+    .page-title{font-size:19px;}
+    .btn-primary{padding:10px 13px;}
+    /* Lịch tháng gọn hơn trên điện thoại */
+    .month-grid{gap:5px;}
+    .day-cell{min-height:60px; padding:5px; border-radius:9px; gap:2px;}
+    .day-num{font-size:11px;}
+    .weekday-label{font-size:10px; padding-bottom:3px;}
+    /* Lịch tuần: cuộn ngang để mỗi ngày đủ rộng, dễ đọc */
+    .week-grid{grid-template-columns:repeat(7, 132px); overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px;}
     .bottom-nav{
       display:flex; position:fixed; bottom:0; left:0; right:0; height:64px; background:var(--bg-elev);
       border-top:1px solid var(--border); z-index:30; justify-content:space-around; align-items:center;
@@ -365,6 +392,11 @@ function Icon({ name, size = 18, strokeWidth = 2 }) {
     case "pause": return <svg {...p} fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>;
     case "reset": return <svg {...p}><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a8.5 8.5 0 1 0 2-9L1 10"/></svg>;
     case "alert": return <svg {...p}><path d="M12 3 2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14.5"/><circle cx="12" cy="17.3" r="0.9" fill="currentColor"/></svg>;
+    case "download": return <svg {...p}><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>;
+    case "upload": return <svg {...p}><path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M5 3h14"/></svg>;
+    case "more": return <svg {...p}><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>;
+    case "logout": return <svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+    case "sheet": return <svg {...p}><rect x="3" y="3" width="18" height="18" rx="2.5"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg>;
     default: return null;
   }
 }
@@ -382,6 +414,86 @@ function fmtShort(dateStr){
 const WEEKDAYS_VN = ["CN","T2","T3","T4","T5","T6","T7"];
 const CATS = { ppc: { label: "PPC Ads", color: "var(--ppc)" }, it: { label: "IT / Hệ thống", color: "var(--it)" }, tiktok: { label: "TikTok Shop", color: "var(--tiktok)" }, personal: { label: "Cá nhân", color: "var(--personal)" } };
 const PRI = { high: { label: "Cao", color: "var(--high)", bg: "var(--high-bg)" }, med: { label: "Trung bình", color: "var(--med)", bg: "var(--med-bg)" }, low: { label: "Thấp", color: "var(--low)", bg: "var(--low-bg)" } };
+const STATUS_LABEL = { todo: "Cần làm", inprogress: "Đang làm", done: "Hoàn thành" };
+
+/* ---------- Excel import / export ---------- */
+const CAT_BY_LABEL = {}; Object.entries(CATS).forEach(([k, v]) => { CAT_BY_LABEL[v.label.toLowerCase()] = k; });
+const PRI_BY_LABEL = {}; Object.entries(PRI).forEach(([k, v]) => { PRI_BY_LABEL[v.label.toLowerCase()] = k; });
+const STATUS_BY_LABEL = {}; Object.entries(STATUS_LABEL).forEach(([k, v]) => { STATUS_BY_LABEL[v.toLowerCase()] = k; });
+
+function mapCat(v) { if (!v) return "personal"; const s = String(v).trim().toLowerCase(); return CAT_BY_LABEL[s] || (CATS[s] ? s : "personal"); }
+function mapPri(v) { if (!v) return "med"; const s = String(v).trim().toLowerCase(); return PRI_BY_LABEL[s] || (PRI[s] ? s : "med"); }
+function mapStatus(v) { if (!v) return "todo"; const s = String(v).trim().toLowerCase(); return STATUS_BY_LABEL[s] || (STATUS_LABEL[s] ? s : "todo"); }
+
+function normDate(v) {
+  if (!v) return todayISO;
+  if (v instanceof Date && !isNaN(v)) return iso(v);
+  if (typeof v === "number") { const d = new Date(Math.round((v - 25569) * 86400000)); return isNaN(d) ? todayISO : iso(d); }
+  const s = String(v).trim();
+  const m = s.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  const d = new Date(s); return isNaN(d) ? todayISO : iso(d);
+}
+function normTime(v) {
+  if (!v) return "09:00";
+  if (v instanceof Date && !isNaN(v)) return `${pad(v.getHours())}:${pad(v.getMinutes())}`;
+  if (typeof v === "number") { const mins = Math.round((v % 1) * 24 * 60); return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`; }
+  const m = String(v).match(/(\d{1,2}):(\d{2})/);
+  return m ? `${pad(+m[1])}:${m[2]}` : "09:00";
+}
+
+function exportExcel(tasks, notes, goals) {
+  const wb = XLSX.utils.book_new();
+  const tRows = tasks.map(t => ({ "Tên công việc": t.title, "Mô tả": t.desc || "", "Ngày (YYYY-MM-DD)": t.date, "Giờ (HH:MM)": t.time, "Mảng": CATS[t.cat] ? CATS[t.cat].label : t.cat, "Ưu tiên": PRI[t.priority] ? PRI[t.priority].label : t.priority, "Trạng thái": STATUS_LABEL[t.status] || t.status }));
+  const nRows = notes.map(n => ({ "Tiêu đề": n.title, "Nội dung": n.body || "", "Ngày (YYYY-MM-DD)": n.date }));
+  const gRows = goals.map(g => ({ "Tên mục tiêu": g.title, "Hiện tại": g.current, "Mục tiêu": g.target, "Đơn vị": g.unit || "" }));
+  const emptyT = [{ "Tên công việc": "", "Mô tả": "", "Ngày (YYYY-MM-DD)": "", "Giờ (HH:MM)": "", "Mảng": "", "Ưu tiên": "", "Trạng thái": "" }];
+  const emptyN = [{ "Tiêu đề": "", "Nội dung": "", "Ngày (YYYY-MM-DD)": "" }];
+  const emptyG = [{ "Tên mục tiêu": "", "Hiện tại": "", "Mục tiêu": "", "Đơn vị": "" }];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tRows.length ? tRows : emptyT), "Cong viec");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(nRows.length ? nRows : emptyN), "Ghi chu");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gRows.length ? gRows : emptyG), "Muc tieu");
+  XLSX.writeFile(wb, "Flow-" + todayISO + ".xlsx");
+}
+
+function pickCol(row, keys, avoid) {
+  for (const k of Object.keys(row)) {
+    const lk = k.toLowerCase().trim();
+    if (avoid && avoid.some(a => lk.includes(a))) continue;
+    for (const cand of keys) if (lk.includes(cand)) return row[k];
+  }
+  return "";
+}
+
+async function parseExcelFile(file) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const byName = n => wb.Sheets[n];
+  const rowsOf = sh => sh ? XLSX.utils.sheet_to_json(sh, { defval: "" }) : [];
+  const tSheet = byName("Cong viec") || wb.Sheets[wb.SheetNames[0]];
+  const nSheet = byName("Ghi chu") || wb.Sheets[wb.SheetNames[1]];
+  const gSheet = byName("Muc tieu") || wb.Sheets[wb.SheetNames[2]];
+
+  const tasks = rowsOf(tSheet).map(r => {
+    const title = String(pickCol(r, ["tên công việc", "tên việc", "tên", "title", "công việc"]) || "").trim();
+    if (!title) return null;
+    return { title, desc: String(pickCol(r, ["mô tả", "mota", "desc", "chi tiết"]) || ""), date: normDate(pickCol(r, ["ngày", "date"])), time: normTime(pickCol(r, ["giờ", "gio", "time"])), cat: mapCat(pickCol(r, ["mảng", "mang", "cat", "nhóm", "loại"])), priority: mapPri(pickCol(r, ["ưu tiên", "uu tien", "priority"])), status: mapStatus(pickCol(r, ["trạng", "trang", "status"])) };
+  }).filter(Boolean);
+
+  const notes = rowsOf(nSheet).map(r => {
+    const title = String(pickCol(r, ["tiêu đề", "tieu de", "title", "tên"]) || "").trim();
+    if (!title) return null;
+    return { title, body: String(pickCol(r, ["nội dung", "noi dung", "body", "ghi chú"]) || ""), date: normDate(pickCol(r, ["ngày", "date"])) };
+  }).filter(Boolean);
+
+  const goals = rowsOf(gSheet).map(r => {
+    const title = String(pickCol(r, ["tên mục tiêu", "mục tiêu", "muc tieu", "title", "tên"]) || "").trim();
+    if (!title) return null;
+    return { title, current: Number(pickCol(r, ["hiện tại", "hien tai", "current"])) || 0, target: Number(pickCol(r, ["mục tiêu", "muc tieu", "target"], ["tên", "hiện", "current"])) || 0, unit: String(pickCol(r, ["đơn vị", "don vi", "unit"]) || "") };
+  }).filter(Boolean);
+
+  return { tasks, notes, goals };
+}
 
 let idCounter = 1000;
 const nextId = () => idCounter++;
@@ -585,6 +697,69 @@ function GoalModal({ initial, onClose, onSave, onDelete }) {
           <button className="btn-ghost" onClick={onClose}>Hủy</button>
           <button className="btn-solid" onClick={() => { if (form.title.trim()) onSave(form); }}>Lưu</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Data (Excel) Modal ---------- */
+function DataModal({ onClose, onExport, onImportFile }) {
+  const fileRef = useRef(null);
+  return (
+    <div className="overlay" onMouseDown={onClose}>
+      <div className="modal" onMouseDown={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">Dữ liệu Excel</div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="data-row">
+            <div className="data-info">
+              <div className="data-t"><Icon name="download" size={15} /> Xuất Excel</div>
+              <div className="data-d">Tải toàn bộ Công việc, Ghi chú, Mục tiêu ra 1 file .xlsx (3 sheet). Có thể dùng làm mẫu để điền thêm rồi nhập lại.</div>
+            </div>
+            <button className="btn-solid" style={{ flex: "0 0 auto", padding: "10px 16px" }} onClick={onExport}>Xuất</button>
+          </div>
+          <div className="data-row">
+            <div className="data-info">
+              <div className="data-t"><Icon name="upload" size={15} /> Nhập Excel</div>
+              <div className="data-d">Chọn file .xlsx (theo mẫu ở trên). Mỗi hàng có tên sẽ được thêm mới — không xoá dữ liệu cũ. Tự đồng bộ nếu đang đăng nhập.</div>
+            </div>
+            <button className="btn-ghost" style={{ flex: "0 0 auto", padding: "10px 16px" }} onClick={() => fileRef.current && fileRef.current.click()}>Chọn file</button>
+          </div>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
+            onChange={e => { const f = e.target.files[0]; if (f) onImportFile(f); e.target.value = ""; }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Mobile "More" sheet ---------- */
+function MoreSheet({ view, setView, theme, toggleTheme, openData, cloud, session, localOnly, onSignOut, onLogin, onClose }) {
+  const items = [
+    { key: "pomodoro", label: "Pomodoro", icon: "timer" },
+    { key: "goals", label: "Mục tiêu", icon: "target" },
+    { key: "stats", label: "Thống kê", icon: "bar" },
+  ];
+  const go = k => { setView(k); onClose(); };
+  return (
+    <div className="sheet-overlay" onMouseDown={onClose}>
+      <div className="sheet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sheet-grip" />
+        <div className="sheet-grid">
+          {items.map(it => (
+            <button key={it.key} className={"sheet-item" + (view === it.key ? " active" : "")} onClick={() => go(it.key)}>
+              <Icon name={it.icon} size={20} /><span>{it.label}</span>
+            </button>
+          ))}
+          <button className="sheet-item" onClick={() => { openData(); onClose(); }}><Icon name="sheet" size={20} /><span>Excel</span></button>
+          <button className="sheet-item" onClick={toggleTheme}><Icon name={theme === "light" ? "moon" : "sun"} size={20} /><span>{theme === "light" ? "Nền tối" : "Nền sáng"}</span></button>
+          {cloud && session
+            ? <button className="sheet-item" onClick={() => { onSignOut(); onClose(); }}><Icon name="logout" size={20} /><span>Đăng xuất</span></button>
+            : (localOnly ? <button className="sheet-item" onClick={() => { onLogin(); onClose(); }}><Icon name="target" size={20} /><span>Đăng nhập</span></button> : null)}
+        </div>
+        {cloud && session && <div className="sheet-acc"><Icon name="check" size={13} /> {session.user.email}</div>}
       </div>
     </div>
   );
@@ -1140,6 +1315,8 @@ function App() {
   const [taskModal, setTaskModal] = useState(null); // {mode:'new'|'edit', task, presetDate}
   const [noteModal, setNoteModal] = useState(null);
   const [goalModal, setGoalModal] = useState(null);
+  const [dataModal, setDataModal] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   function alertSync(error) {
     console.error("[Flow sync]", error);
@@ -1226,6 +1403,29 @@ function App() {
     setSession(null); setLocalOnly(false);
   }
 
+  function doExport() { exportExcel(tasks, notes, goals); }
+
+  async function importFile(file) {
+    let parsed;
+    try { parsed = await parseExcelFile(file); }
+    catch (e) { console.error(e); alert("Không đọc được file. Hãy dùng file .xlsx đúng mẫu (xuất từ nút Xuất Excel)."); return; }
+    const { tasks: it, notes: inn, goals: ig } = parsed;
+    if (!it.length && !inn.length && !ig.length) { alert("Không tìm thấy dòng nào có dữ liệu trong file."); return; }
+    if (cloud) {
+      try {
+        if (it.length)  { const { data, error } = await sb.from("tasks").insert(it.map(taskToRow)).select(); if (error) throw error; setTasks(ts => [...ts, ...data.map(rowToTask)]); }
+        if (inn.length) { const { data, error } = await sb.from("notes").insert(inn.map(noteToRow)).select(); if (error) throw error; setNotes(ns => [...data.map(rowToNote), ...ns]); }
+        if (ig.length)  { const { data, error } = await sb.from("goals").insert(ig.map(goalToRow)).select(); if (error) throw error; setGoals(gs => [...gs, ...data.map(rowToGoal)]); }
+      } catch (e) { return alertSync(e); }
+    } else {
+      if (it.length)  setTasks(ts => [...ts, ...it.map(x => ({ ...x, id: nextId() }))]);
+      if (inn.length) setNotes(ns => [...inn.map(x => ({ ...x, id: nextId() })), ...ns]);
+      if (ig.length)  setGoals(gs => [...gs, ...ig.map(x => ({ ...x, id: nextId() }))]);
+    }
+    setDataModal(false);
+    alert(`Đã nhập: ${it.length} công việc, ${inn.length} ghi chú, ${ig.length} mục tiêu.`);
+  }
+
   // Loading / auth gate
   if (HAS_SUPABASE && !authReady) {
     return <div id="app-root" data-theme={theme}><div className="auth-wrap"><div style={{color:"var(--text-faint)",fontWeight:600}}>Đang tải…</div></div></div>;
@@ -1251,6 +1451,7 @@ function App() {
           </nav>
           <div className="sidebar-foot">
             <div className="streak"><Icon name="flame" size={14}/> {tasks.filter(t=>t.status==="done").length} việc đã hoàn thành</div>
+            <button className="logout-btn" onClick={()=>setDataModal(true)}><Icon name="sheet" size={13}/> Dữ liệu Excel</button>
             {cloud && session && (
               <>
                 <div className="sync-row"><Icon name="check" size={13}/> {session.user.email}</div>
@@ -1291,12 +1492,16 @@ function App() {
       </div>
 
       <div className="bottom-nav">
-        {NAV.slice(0,5).map(n => (
+        {NAV.slice(0,4).map(n => (
           <button key={n.key} className={"bn-item" + (view===n.key?" active":"")} onClick={()=>setView(n.key)}>
             <Icon name={n.icon} size={19}/>
             {n.label}
           </button>
         ))}
+        <button className={"bn-item" + (["pomodoro","goals","stats"].includes(view)?" active":"")} onClick={()=>setMoreOpen(true)}>
+          <Icon name="more" size={19}/>
+          Thêm
+        </button>
       </div>
 
       {taskModal && (
@@ -1321,6 +1526,17 @@ function App() {
           onClose={()=>setGoalModal(null)}
           onSave={saveGoal}
           onDelete={deleteGoal}
+        />
+      )}
+      {dataModal && <DataModal onClose={()=>setDataModal(false)} onExport={doExport} onImportFile={importFile} />}
+      {moreOpen && (
+        <MoreSheet
+          view={view} setView={setView} theme={theme}
+          toggleTheme={()=>setTheme(t=>t==="light"?"dark":"light")}
+          openData={()=>setDataModal(true)}
+          cloud={cloud} session={session} localOnly={localOnly}
+          onSignOut={signOut} onLogin={()=>setLocalOnly(false)}
+          onClose={()=>setMoreOpen(false)}
         />
       )}
     </div>
