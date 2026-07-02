@@ -1009,22 +1009,41 @@ function StatsView({ tasks }) {
   );
 }
 
-/* ---------- Auth Gate ---------- */
+/* ---------- Auth Gate (email + mật khẩu) ---------- */
 function AuthGate({ theme, onSkip }) {
+  const [mode, setMode] = useState("signin"); // signin | signup
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState("idle"); // idle | sending | sent | error
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [err, setErr] = useState(false);
 
-  async function sendLink(e) {
+  function switchMode(m) { setMode(m); setMsg(""); setErr(false); }
+
+  async function submit(e) {
     e.preventDefault();
-    if (!email.trim()) return;
-    setStatus("sending"); setMsg("");
-    const { error } = await sb.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.origin + window.location.pathname }
-    });
-    if (error) { setStatus("error"); setMsg(error.message || "Không gửi được liên kết. Vui lòng thử lại."); }
-    else { setStatus("sent"); setMsg("Đã gửi liên kết đăng nhập tới " + email.trim() + ". Mở email và bấm vào liên kết để vào ứng dụng."); }
+    const em = email.trim();
+    if (!em || !password) return;
+    if (password.length < 6) { setErr(true); setMsg("Mật khẩu cần tối thiểu 6 ký tự."); return; }
+    setBusy(true); setMsg(""); setErr(false);
+    const { data, error } = mode === "signup"
+      ? await sb.auth.signUp({ email: em, password })
+      : await sb.auth.signInWithPassword({ email: em, password });
+    setBusy(false);
+    if (error) {
+      setErr(true);
+      const m = error.message || "";
+      if (/already registered|already exists|User already/i.test(m)) setMsg("Email này đã có tài khoản. Hãy chuyển sang tab \"Đăng nhập\".");
+      else if (/invalid login credentials/i.test(m)) setMsg("Email hoặc mật khẩu không đúng.");
+      else if (/not confirmed|confirm/i.test(m)) setMsg("Tài khoản chưa xác nhận email. Vào Supabase → Authentication → Providers → Email, TẮT \"Confirm email\", rồi thử lại.");
+      else setMsg(m);
+      return;
+    }
+    if (mode === "signup" && data && !data.session) {
+      setErr(true);
+      setMsg("Đã tạo tài khoản nhưng đang bật xác nhận email. Vào Supabase → Authentication → Providers → Email, TẮT \"Confirm email\" để đăng nhập ngay.");
+    }
+    // Có session → listener onAuthStateChange sẽ tự đưa vào app.
   }
 
   return (
@@ -1032,14 +1051,20 @@ function AuthGate({ theme, onSkip }) {
       <div className="auth-wrap">
         <div className="auth-card">
           <div className="auth-mark"><Icon name="target" size={26} strokeWidth={2.4} /></div>
-          <div className="auth-title">Đăng nhập vào Flow</div>
-          <div className="auth-sub">Nhập email của bạn, chúng tôi sẽ gửi một liên kết đăng nhập (magic link). Không cần mật khẩu.</div>
-          <form className="auth-form" onSubmit={sendLink}>
-            <input className="field-input" type="email" placeholder="ban@email.com" value={email}
-              onChange={e => setEmail(e.target.value)} disabled={status === "sending" || status === "sent"} />
-            {msg && <div className={"auth-msg " + (status === "error" ? "err" : "ok")}>{msg}</div>}
-            <button className="btn-solid" type="submit" disabled={status === "sending" || status === "sent"}>
-              {status === "sending" ? "Đang gửi..." : status === "sent" ? "Đã gửi ✓" : "Gửi liên kết đăng nhập"}
+          <div className="auth-title">Flow</div>
+          <div className="auth-sub">{mode === "signin" ? "Đăng nhập để đồng bộ công việc trên mọi thiết bị." : "Tạo tài khoản mới để bắt đầu."}</div>
+          <div className="segmented" style={{ marginTop: 18, width: "100%" }}>
+            <button type="button" className={"seg-btn" + (mode === "signin" ? " active" : "")} style={{ flex: 1 }} onClick={() => switchMode("signin")}>Đăng nhập</button>
+            <button type="button" className={"seg-btn" + (mode === "signup" ? " active" : "")} style={{ flex: 1 }} onClick={() => switchMode("signup")}>Tạo tài khoản</button>
+          </div>
+          <form className="auth-form" onSubmit={submit}>
+            <input className="field-input" type="email" placeholder="Email (vd: cuong@flow.app)" value={email}
+              onChange={e => setEmail(e.target.value)} autoComplete="email" />
+            <input className="field-input" type="password" placeholder="Mật khẩu (tối thiểu 6 ký tự)" value={password}
+              onChange={e => setPassword(e.target.value)} autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+            {msg && <div className={"auth-msg " + (err ? "err" : "ok")}>{msg}</div>}
+            <button className="btn-solid" type="submit" disabled={busy}>
+              {busy ? "Đang xử lý..." : mode === "signin" ? "Đăng nhập" : "Tạo tài khoản"}
             </button>
           </form>
           <div className="auth-skip">Chưa muốn đăng nhập? <button type="button" onClick={onSkip}>Dùng offline (không đồng bộ)</button></div>

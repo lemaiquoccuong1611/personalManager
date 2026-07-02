@@ -41,19 +41,13 @@ Web app 1 file (React UMD + Babel, **không cần build**) với đồng bộ d�
 3. Kiểm tra **Table Editor** → phải thấy 3 bảng: `tasks`, `notes`, `goals`.
    (Script đã tự bật Row Level Security để mỗi người chỉ thấy dữ liệu của chính mình.)
 
-## Bước 3 — Cấu hình đăng nhập (magic link)
+## Bước 3 — Cấu hình đăng nhập (email + mật khẩu)
 
 1. **Authentication → Providers → Email**: bật **Enable Email provider**.
-   Bật luôn **Enable Email OTP / Magic Link** (mặc định đã bật).
-2. **Authentication → URL Configuration**:
-   - **Site URL:** đặt bằng địa chỉ web thật sau khi deploy, ví dụ `https://flow-cua-ban.netlify.app`
-   - **Redirect URLs:** thêm cả 2 dòng (mỗi dòng 1 URL):
-     ```
-     http://localhost:8000
-     https://flow-cua-ban.netlify.app
-     ```
-   > Nếu địa chỉ magic link không nằm trong danh sách này, bấm vào link sẽ báo lỗi redirect.
-   > Deploy xong ở Bước 6 mới có URL Netlify chính xác — quay lại đây cập nhật.
+2. **TẮT "Confirm email"** (cùng trang Email provider): gạt **Confirm email → OFF**.
+   > Tắt bước này để **tạo tài khoản là đăng nhập được ngay**, không phải mở email xác nhận.
+   > Nhờ vậy có thể dùng email bất kỳ đúng định dạng (vd `cuong@flow.app`) mà không cần hộp thư thật.
+3. (Không bắt buộc với email+mật khẩu) **Authentication → URL Configuration → Site URL**: đặt bằng URL web thật sau khi deploy — dùng cho các email hệ thống (đặt lại mật khẩu…).
 
 ## Bước 4 — Chạy thử ở máy (localhost)
 
