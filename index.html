@@ -1077,11 +1077,34 @@ function TasksView({ tasks, onEditTask, onMoveStatus, onDeleteTask }) {
   ];
   const dragId = useRef(null);
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const [day, setDay] = useState(todayISO);
+
+  const source = showAll ? tasks : tasks.filter(t => t.date === day);
+  const dayLabel = day === todayISO ? `Hôm nay · ${fmtShort(day)}`
+    : day === addDays(todayISO, 1) ? `Ngày mai · ${fmtShort(day)}`
+    : new Date(day).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
 
   return (
-    <div className="kanban">
+    <div>
+      <div className="cal-head">
+        <div className="cal-nav">
+          <button className="icon-btn" onClick={() => { setShowAll(false); setDay(d => addDays(d, -1)); }}><Icon name="chevronL" size={16} /></button>
+          <div className="cal-title" style={{ textTransform: "capitalize", minWidth: 170 }}>{showAll ? "Tất cả công việc" : dayLabel}</div>
+          <button className="icon-btn" onClick={() => { setShowAll(false); setDay(d => addDays(d, 1)); }}><Icon name="chevronR" size={16} /></button>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input type="date" className="field-input" style={{ width: "auto" }} value={day} onChange={e => { setDay(e.target.value); setShowAll(false); }} />
+          <button className="btn-ghost" style={{ flex: "none", padding: "8px 14px" }} onClick={() => { setShowAll(false); setDay(todayISO); }}>Hôm nay</button>
+          <div className="segmented">
+            <button className={"seg-btn" + (!showAll ? " active" : "")} onClick={() => setShowAll(false)}>Theo ngày</button>
+            <button className={"seg-btn" + (showAll ? " active" : "")} onClick={() => setShowAll(true)}>Tất cả</button>
+          </div>
+        </div>
+      </div>
+      <div className="kanban">
       {cols.map(col => {
-        const colTasks = tasks.filter(t => t.status === col.key);
+        const colTasks = source.filter(t => t.status === col.key);
         return (
           <div className="kanban-col" key={col.key}>
             <div className="kanban-head">
@@ -1122,6 +1145,7 @@ function TasksView({ tasks, onEditTask, onMoveStatus, onDeleteTask }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
