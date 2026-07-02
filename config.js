@@ -10,6 +10,6 @@
  * Dữ liệu được bảo vệ bằng Row Level Security (RLS) ở phía Supabase.
  */
 window.FLOW_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: ""
+  SUPABASE_URL: "https://hjqgfidzvjlvmzdsrxwp.supabase.co",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhqcWdmaWR6dmpsdm16ZHNyeHdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NTkyMzYsImV4cCI6MjA5ODUzNTIzNn0.zp2Mr7rVONoDaoJVf3zSpcqz8ID6zL7icQMFt1AvIQQ"
 };
