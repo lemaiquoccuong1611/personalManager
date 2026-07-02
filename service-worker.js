@@ -1,4 +1,4 @@
-const CACHE_NAME = "flow-app-cache-v3";
+const CACHE_NAME = "flow-app-cache-v4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -29,21 +29,19 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
 
-  // Never cache Supabase API/auth calls — always go to network.
+  // Never cache Supabase API/auth/realtime calls — always go to network.
   if (url.hostname.endsWith(".supabase.co")) return;
 
+  // Network-first: luôn lấy bản mới nhất khi có mạng, offline thì dùng cache.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((res) => {
-          if (res && res.status === 200 && event.request.url.startsWith(self.location.origin)) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(event.request)
+      .then((res) => {
+        if (res && res.status === 200 && url.origin === self.location.origin) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

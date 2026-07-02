@@ -333,12 +333,18 @@
     /* Lịch tuần: cuộn ngang để mỗi ngày đủ rộng, dễ đọc */
     .week-grid{grid-template-columns:repeat(7, 132px); overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px;}
     .bottom-nav{
-      display:flex; position:fixed; bottom:0; left:0; right:0; height:64px; background:var(--bg-elev);
-      border-top:1px solid var(--border); z-index:30; justify-content:space-around; align-items:center;
-      padding-bottom:env(safe-area-inset-bottom);
+      display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--bg-elev);
+      border-top:1px solid var(--border); z-index:30; align-items:stretch; gap:2px;
+      padding:6px 8px calc(6px + env(safe-area-inset-bottom));
     }
-    .bn-item{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text-faint); font-size:9.5px; font-weight:700; flex:1; padding:6px 0;}
-    .bn-item.active{color:var(--accent);}
+    .bn-item{
+      flex:1 1 0; min-width:0;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+      color:var(--text-faint); font-size:10px; font-weight:600; line-height:1; white-space:nowrap;
+      padding:8px 2px; border-radius:14px; transition:background .15s ease, color .15s ease;
+    }
+    .bn-item.active{color:var(--accent); background:var(--accent-soft);}
+    .bn-item:active{transform:scale(.94);}
     .field-row{grid-template-columns:1fr;}
   }
 </style>
