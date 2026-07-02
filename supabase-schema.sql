@@ -80,3 +80,19 @@ drop policy if exists "goals_update_own" on public.goals;
 create policy "goals_update_own" on public.goals for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "goals_delete_own" on public.goals;
 create policy "goals_delete_own" on public.goals for delete using (auth.uid() = user_id);
+
+-- =====================================================================
+--  REALTIME — bật đồng bộ tức thời giữa các thiết bị (chạy 1 lần, an toàn)
+-- =====================================================================
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='tasks') then
+    alter publication supabase_realtime add table public.tasks;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='notes') then
+    alter publication supabase_realtime add table public.notes;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='goals') then
+    alter publication supabase_realtime add table public.goals;
+  end if;
+end $$;

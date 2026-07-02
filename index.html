@@ -1420,6 +1420,34 @@ function App() {
     return () => { cancelled = true; };
   }, [cloud, uid]);
 
+  // Đồng bộ real-time: nhận thay đổi từ thiết bị khác không cần refresh
+  useEffect(() => {
+    if (!cloud) return;
+    const applyRT = (kind, p) => {
+      const ev = p.eventType, row = p.new, old = p.old;
+      if (kind === "tasks") {
+        if (ev === "INSERT") setTasks(ts => ts.some(t => t.id === row.id) ? ts : [...ts, rowToTask(row)]);
+        else if (ev === "UPDATE") setTasks(ts => ts.map(t => t.id === row.id ? rowToTask(row) : t));
+        else if (ev === "DELETE") setTasks(ts => ts.filter(t => t.id !== old.id));
+      } else if (kind === "notes") {
+        if (ev === "INSERT") setNotes(ns => ns.some(n => n.id === row.id) ? ns : [rowToNote(row), ...ns]);
+        else if (ev === "UPDATE") setNotes(ns => ns.map(n => n.id === row.id ? rowToNote(row) : n));
+        else if (ev === "DELETE") setNotes(ns => ns.filter(n => n.id !== old.id));
+      } else if (kind === "goals") {
+        if (ev === "INSERT") setGoals(gs => gs.some(g => g.id === row.id) ? gs : [...gs, rowToGoal(row)]);
+        else if (ev === "UPDATE") setGoals(gs => gs.map(g => g.id === row.id ? rowToGoal(row) : g));
+        else if (ev === "DELETE") setGoals(gs => gs.filter(g => g.id !== old.id));
+      }
+    };
+    const flt = `user_id=eq.${uid}`;
+    const ch = sb.channel("flow-rt-" + uid)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: flt }, p => applyRT("tasks", p))
+      .on("postgres_changes", { event: "*", schema: "public", table: "notes", filter: flt }, p => applyRT("notes", p))
+      .on("postgres_changes", { event: "*", schema: "public", table: "goals", filter: flt }, p => applyRT("goals", p))
+      .subscribe();
+    return () => { sb.removeChannel(ch); };
+  }, [cloud, uid]);
+
   const [taskModal, setTaskModal] = useState(null); // {mode:'new'|'edit', task, presetDate}
   const [noteModal, setNoteModal] = useState(null);
   const [goalModal, setGoalModal] = useState(null);
