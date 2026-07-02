@@ -495,6 +495,71 @@ async function parseExcelFile(file) {
   return { tasks, notes, goals };
 }
 
+/* ---------- Lịch lặp hàng tuần (weekly recurring) ---------- */
+// Thứ -> getDay() (CN=0, T2=1 ... T7=6)
+function parseWeekday(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return null;
+  if (s.includes("cn") || s.includes("chủ") || s.includes("chu nhat") || s.includes("sun")) return 0;
+  const en = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  for (const k in en) if (s.includes(k)) return en[k];
+  const m = s.match(/(\d+)/);
+  if (m) { const n = +m[1]; if (n >= 2 && n <= 7) return n - 1; if (n === 1) return 0; }
+  return null;
+}
+function mondayOf(dateStr) { const d = new Date(dateStr); const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day)); return iso(d); }
+
+function buildWeeklySample() {
+  const rows = [];
+  const add = (thu, time, title, cat, pri) => rows.push({ "Thứ": thu, "Giờ (HH:MM)": time, "Tên công việc": title, "Mảng": CATS[cat].label, "Ưu tiên": PRI[pri].label });
+  add("T2", "08:00", "PPC Ads - Deep work", "ppc", "med");
+  add("T2", "08:30", "Họp cả công ty", "personal", "med");
+  add("T2", "10:00", "Họp team PPC Ads", "ppc", "high");
+  add("T2", "11:00", "TikTok Shop - Deep work", "tiktok", "med");
+  add("T2", "11:30", "Họp team TikTok Shop", "tiktok", "med");
+  add("T2", "13:30", "IT - Deep work", "it", "med");
+  add("T2", "14:00", "Báo cáo Data Ads (tổng hợp)", "ppc", "high");
+  add("T2", "14:30", "IT - Deep work", "it", "med");
+  add("T2", "17:00", "TikTok Shop - Deep work", "tiktok", "med");
+  ["T3", "T4", "T5", "T6"].forEach(d => {
+    add(d, "08:00", "PPC Ads - Deep work", "ppc", "med");
+    add(d, "11:00", "TikTok Shop - Deep work", "tiktok", "med");
+    add(d, "13:30", "IT - Deep work", "it", "med");
+    add(d, "14:00", "Báo cáo Data Ads (tổng hợp)", "ppc", "high");
+    add(d, "14:30", "IT - Deep work", "it", "med");
+    if (d === "T5") add(d, "16:30", "Sync team IT (hàng tuần)", "it", "low");
+    add(d, "17:00", "TikTok Shop - Deep work", "tiktok", "med");
+  });
+  return rows;
+}
+function exportWeeklyTemplate() {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buildWeeklySample()), "Lich lap");
+  XLSX.writeFile(wb, "Flow-lich-lap-mau.xlsx");
+}
+async function parseWeeklyTemplate(file) {
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
+  const sh = wb.Sheets[wb.SheetNames[0]];
+  const rows = sh ? XLSX.utils.sheet_to_json(sh, { defval: "" }) : [];
+  return rows.map(r => {
+    const title = String(pickCol(r, ["tên công việc", "tên việc", "việc", "title", "tên"]) || "").trim();
+    const dow = parseWeekday(pickCol(r, ["thứ", "weekday", "ngày trong tuần"]));
+    if (!title || dow == null) return null;
+    return { dow, time: normTime(pickCol(r, ["giờ", "gio", "time"])), title, desc: String(pickCol(r, ["mô tả", "desc"]) || ""), cat: mapCat(pickCol(r, ["mảng", "mang", "cat", "loại"])), priority: mapPri(pickCol(r, ["ưu tiên", "priority"])) };
+  }).filter(Boolean);
+}
+function generateFromWeekly(items, startISO, weeks) {
+  const mon0 = mondayOf(startISO);
+  const out = [];
+  for (let w = 0; w < weeks; w++)
+    for (const it of items) {
+      const offset = it.dow === 0 ? 6 : it.dow - 1;
+      out.push({ title: it.title, desc: it.desc || "", date: addDays(mon0, w * 7 + offset), time: it.time, priority: it.priority, status: "todo", cat: it.cat });
+    }
+  return out;
+}
+
 let idCounter = 1000;
 const nextId = () => idCounter++;
 
@@ -703,8 +768,11 @@ function GoalModal({ initial, onClose, onSave, onDelete }) {
 }
 
 /* ---------- Data (Excel) Modal ---------- */
-function DataModal({ onClose, onExport, onImportFile }) {
+function DataModal({ onClose, onExport, onImportFile, onExportWeekly, onImportWeekly }) {
   const fileRef = useRef(null);
+  const weeklyRef = useRef(null);
+  const [weeks, setWeeks] = useState(4);
+  const [start, setStart] = useState(todayISO);
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div className="modal" onMouseDown={e => e.stopPropagation()}>
@@ -722,13 +790,29 @@ function DataModal({ onClose, onExport, onImportFile }) {
           </div>
           <div className="data-row">
             <div className="data-info">
-              <div className="data-t"><Icon name="upload" size={15} /> Nhập Excel</div>
+              <div className="data-t"><Icon name="upload" size={15} /> Nhập Excel (theo ngày)</div>
               <div className="data-d">Chọn file .xlsx (theo mẫu ở trên). Mỗi hàng có tên sẽ được thêm mới — không xoá dữ liệu cũ. Tự đồng bộ nếu đang đăng nhập.</div>
             </div>
             <button className="btn-ghost" style={{ flex: "0 0 auto", padding: "10px 16px" }} onClick={() => fileRef.current && fileRef.current.click()}>Chọn file</button>
           </div>
+          <div className="data-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 12 }}>
+            <div className="data-info">
+              <div className="data-t"><Icon name="calendar" size={15} /> Lịch lặp hàng tuần</div>
+              <div className="data-d">File có cột <b>Thứ · Giờ · Tên công việc · Mảng</b>. App tự tạo công việc cho số tuần bạn chọn (bắt đầu từ tuần chứa ngày đã chọn). Bấm "Xuất mẫu lịch" để lấy file mẫu đã điền sẵn lịch của bạn.</div>
+            </div>
+            <div className="field-row" style={{ width: "100%" }}>
+              <div><label className="field-label">Số tuần</label><input type="number" min="1" max="52" className="field-input" value={weeks} onChange={e => setWeeks(+e.target.value)} /></div>
+              <div><label className="field-label">Bắt đầu từ</label><input type="date" className="field-input" value={start} onChange={e => setStart(e.target.value)} /></div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn-ghost" style={{ flex: 1, padding: "10px" }} onClick={onExportWeekly}><Icon name="download" size={14} /> Xuất mẫu lịch</button>
+              <button className="btn-solid" style={{ flex: 1, padding: "10px" }} onClick={() => weeklyRef.current && weeklyRef.current.click()}><Icon name="upload" size={14} /> Nhập lịch lặp</button>
+            </div>
+          </div>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
             onChange={e => { const f = e.target.files[0]; if (f) onImportFile(f); e.target.value = ""; }} />
+          <input ref={weeklyRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
+            onChange={e => { const f = e.target.files[0]; if (f) onImportWeekly(f, start, weeks); e.target.value = ""; }} />
         </div>
       </div>
     </div>
@@ -1426,6 +1510,23 @@ function App() {
     alert(`Đã nhập: ${it.length} công việc, ${inn.length} ghi chú, ${ig.length} mục tiêu.`);
   }
 
+  async function importWeekly(file, startISO, weeks) {
+    const w = Math.max(1, Math.min(52, weeks || 4));
+    let items;
+    try { items = await parseWeeklyTemplate(file); }
+    catch (e) { console.error(e); alert("Không đọc được file lịch lặp. Hãy dùng file .xlsx theo mẫu (nút Xuất mẫu lịch)."); return; }
+    if (!items.length) { alert("Không tìm thấy khung lịch nào (cần cột Thứ + Tên công việc)."); return; }
+    const gen = generateFromWeekly(items, startISO || todayISO, w);
+    if (cloud) {
+      try { const { data, error } = await sb.from("tasks").insert(gen.map(taskToRow)).select(); if (error) throw error; setTasks(ts => [...ts, ...data.map(rowToTask)]); }
+      catch (e) { return alertSync(e); }
+    } else {
+      setTasks(ts => [...ts, ...gen.map(x => ({ ...x, id: nextId() }))]);
+    }
+    setDataModal(false);
+    alert(`Đã tạo ${gen.length} công việc từ ${items.length} khung lịch × ${w} tuần.`);
+  }
+
   // Loading / auth gate
   if (HAS_SUPABASE && !authReady) {
     return <div id="app-root" data-theme={theme}><div className="auth-wrap"><div style={{color:"var(--text-faint)",fontWeight:600}}>Đang tải…</div></div></div>;
@@ -1528,7 +1629,7 @@ function App() {
           onDelete={deleteGoal}
         />
       )}
-      {dataModal && <DataModal onClose={()=>setDataModal(false)} onExport={doExport} onImportFile={importFile} />}
+      {dataModal && <DataModal onClose={()=>setDataModal(false)} onExport={doExport} onImportFile={importFile} onExportWeekly={exportWeeklyTemplate} onImportWeekly={importWeekly} />}
       {moreOpen && (
         <MoreSheet
           view={view} setView={setView} theme={theme}
